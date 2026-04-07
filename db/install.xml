@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="local/ai_forum_assistant/db" VERSION="20250401" COMMENT="XMLDB file for local/ai_forum_assistant"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="local_aifa_config" COMMENT="Per-forum configuration for the AI Forum Assistant">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="forumid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to {forum}.id"/>
+        <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="1=enabled, 0=disabled"/>
+        <FIELD NAME="bot_userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to {user}.id — the Moodle user that posts AI responses"/>
+        <FIELD NAME="response_mode" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="immediate" SEQUENCE="false" COMMENT="immediate (daily mode reserved for full version)"/>
+        <FIELD NAME="daily_prompt" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="System prompt for daily summary mode (full version)"/>
+        <FIELD NAME="immediate_prompt" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="System prompt for immediate response mode"/>
+        <FIELD NAME="disclaimer" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Disclaimer appended to every AI response (full version)"/>
+        <FIELD NAME="max_requests_day" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="50" SEQUENCE="false" COMMENT="Max OpenAI calls per day for this forum"/>
+        <FIELD NAME="max_requests_user_day" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Max AI responses per user per day — 0 = unlimited (free version always uses 0)"/>
+        <FIELD NAME="delay_response" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Delay AI reply by 1 hour — always 0 in free version"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_forumid" TYPE="foreign" FIELDS="forumid" REFTABLE="forum" REFFIELDS="id"/>
+        <KEY NAME="fk_bot_userid" TYPE="foreign" FIELDS="bot_userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_forumid" UNIQUE="true" FIELDS="forumid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="local_aifa_usage" COMMENT="Daily usage counter per forum for rate limiting — no personal data stored">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="forumid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to {forum}.id"/>
+        <FIELD NAME="usage_date" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Date in YYYY-MM-DD format"/>
+        <FIELD NAME="request_count" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_forumid_date" UNIQUE="true" FIELDS="forumid, usage_date"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

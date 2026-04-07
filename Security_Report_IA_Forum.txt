@@ -1,0 +1,111 @@
+ Informe de Seguridad Final — local_forumia v1.1.0
+
+  Resumen ejecutivo
+
+  Tras todas las correcciones aplicadas, el plugin ha pasado de 10 vulnerabilidades (2 críticas, 4 altas, 3 medias, 1 baja) a un
+  estado en el que no existe ninguna vulnerabilidad explotable. Lo que queda son 3 observaciones de nivel muy bajo, ninguna de ellas
+  explotable.
+
+  ---
+  Estado de cada issue original
+
+  ┌─────┬─────────────────┬────────────────────────────────────┬────────────────────────────────────────────────────────────────┐
+  │  #  │   Severidad     │               Issue                │                             Estado                             │
+  │     │    original     │                                    │                                                                │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 1   │ 🔴 Crítica      │ SSRF endpoint                      │ ✅ Corregido — whitelist HTTPS + bloqueo IPs                   │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 2   │ 🔴 Crítica      │ IDOR forum_settings.php            │ ✅ Corregido — cm->instance === forumid                        │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 3   │ 🟠 Alta         │ Rate limits globales muertos       │ ✅ Corregido — within_site_daily_limit() operativo             │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 4   │ 🟠 Alta         │ Anti-loop bypass                   │ ✅ Corregido — doble guard (config + resolved)                 │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 5   │ 🟠 Alta         │ Prompt Injection                   │ ✅ Mitigado — delimitadores <student_input> + instrucción en   │
+  │     │                 │                                    │ system prompt                                                  │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 6   │ 🟠 Alta         │ GDPR null_provider incorrecto      │ ✅ Corregido — metadata\provider con                           │
+  │     │                 │                                    │ add_external_location_link                                     │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 7   │ 🟡 Media        │ Race condition contador uso        │ ✅ Corregido — UPDATE atómico SQL                              │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 8   │ 🟡 Media        │ PARAM_RAW_TRIMMED en defaultbot    │ ✅ Corregido — PARAM_NOTAGS                                    │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 9   │ 🟡 Media        │ Sin deduplicación modo inmediato   │ ✅ Corregido — bot_already_replied()                           │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 10  │ 🟢 Baja         │ Info disclosure DEBUG_NORMAL       │ ✅ Mejorado — IDs sensibles movidos a DEBUG_DEVELOPER          │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ —   │ Nueva           │ Flood/spam de máquinas             │ ✅ Corregido — within_user_daily_limit(), default 1/día        │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ —   │ Nueva           │ MESSAGE_OUTPUT_EMAIL constante     │ ✅ Corregido — bloque defaults eliminado                       │
+  │     │                 │ inválida                           │                                                                │
+  ├─────┼─────────────────┼────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ —   │ Nueva           │ Diagnóstico 400 ciego              │ ✅ Mejorado — safe_response_body() loguea detalle              │
+  └─────┴─────────────────┴────────────────────────────────────┴────────────────────────────────────────────────────────────────┘
+
+  ---
+  Observaciones residuales (ninguna explotable)
+
+  🔵 Informativa — within_user_daily_limit() hace una lectura de DB redundante
+
+  Archivo: forum_processor.php:531
+
+  // La config ya se cargó en el paso 1 del caller, pero la función la re-lee.
+  $config = $DB->get_record('local_forumia_config', ['forumid' => $forumid]);
+  $max    = (int) ($config->max_requests_user_day ?? 1);
+
+  El caller ya calculó $maxperuser antes de llamar a esta función. La re-lectura interna es una consulta extra innecesaria. No es un
+  problema de seguridad — ambas lecturas deben coincidir — pero es una ineficiencia menor.
+
+  ---
+  🔵 Informativa — userratelimit_enabled/max en la UI global sin efecto
+
+  Archivo: settings.php:108-120
+
+  Los ajustes globales userratelimit_enabled y userratelimit_max (sección 5 de la config de admin) siguen visibles pero no se leen en
+   ningún punto del código. El límite por usuario está implementado a nivel de foro (max_requests_user_day), no a nivel de sitio. Un
+  administrador podría configurar estos campos creyendo que tienen efecto. Es confuso pero no es un riesgo de seguridad.
+
+  ---
+  🔵 Informativa — Respuesta de OpenAI logueada en safe_response_body()
+
+  Archivo: openai_client.php:251-261
+
+  En errores 400 o inesperados, el cuerpo de respuesta de OpenAI se escribe en el log de Moodle (truncado a 500 caracteres). En casos
+   muy concretos (violación de política de contenido), OpenAI podría incluir fragmentos del prompt en el mensaje de error, que a su
+  vez contiene el texto del post del alumno. Este texto llegaría al log de Moodle. Solo es visible para administradores con
+  DEBUG_NORMAL activo, y el log de Moodle requiere acceso de admin para consultarse, por lo que el riesgo es mínimo.
+
+  ---
+  Lo que el plugin protege correctamente ✅
+
+  ┌──────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
+  │         Área         │                                  Mecanismo                                   │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ API key              │ Propiedad private, nunca logueada, sanitise_exception_message() la enmascara │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ SQL injection        │ 100% queries parametrizadas via $DB de Moodle                                │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ XSS en respuesta IA  │ FORMAT_PLAIN + messagetrust = 0 — Moodle escapa al renderizar                │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ CSRF                 │ moodleform con sesskey automático                                            │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Acceso no autorizado │ require_capability('local/forumia:managesettings') + IDOR fix                │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Loops infinitos      │ Guard doble (usuario configurado + usuario resuelto por fallback)            │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Flood/spam           │ Límite por usuario por día (default 1), por foro y por sitio                 │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Duplicados           │ bot_already_replied() antes de llamar a OpenAI                               │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ SSRF                 │ Whitelist HTTPS + bloqueo de IPs + validación en constructor                 │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ GDPR                 │ metadata\provider declara la transferencia a OpenAI                          │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Datos personales     │ Anonimización en modo diario, sin nombres ni emails en payloads              │
+  ├──────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+  │ Errores de API       │ Fail-safe: desactiva el plugin ante 401/403, pausa ante 429                  │
+  └──────────────────────┴──────────────────────────────────────────────────────────────────────────────┘
+
+  ---
+  El plugin está listo para producción desde el punto de vista de seguridad.
